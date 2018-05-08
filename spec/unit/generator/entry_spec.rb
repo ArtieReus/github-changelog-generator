@@ -1,30 +1,31 @@
 # frozen_string_literal: true
 
-# rubocop:disable Metrics/ModuleLength
 module GitHubChangelogGenerator
   RSpec.describe Entry do
     def label(name)
       { "name" => name }
     end
 
-    def issue(title, labels, number = "1", user = { "login" => "user" })
+    def issue(title, labels, body = "", number = "1", user = { "login" => "user" })
       {
         "title" => "issue #{title}",
         "labels" => labels.map { |l| label(l) },
         "number" => number,
         "html_url" => "https://github.com/owner/repo/issue/#{number}",
-        "user" => user
+        "user" => user,
+        "body" => body
       }
     end
 
-    def pr(title, labels, number = "1", user = { "login" => "user" })
+    def pr(title, labels, body = "", number = "1", user = { "login" => "user" })
       {
         "pull_request" => true,
         "title" => "pr #{title}",
         "labels" => labels.map { |l| label(l) },
         "number" => number,
         "html_url" => "https://github.com/owner/repo/pull/#{number}",
-        "user" => user.merge("html_url" => "https://github.com/#{user['login']}")
+        "user" => user.merge("html_url" => "https://github.com/#{user['login']}"),
+        "body" => body
       }
     end
 
@@ -49,21 +50,21 @@ module GitHubChangelogGenerator
 
       let(:issues) do
         [
-          issue("no labels", [], "5", "login" => "user1"),
-          issue("enhancement", ["enhancement"], "6", "login" => "user2"),
-          issue("bug", ["bug"], "7", "login" => "user1"),
-          issue("breaking", ["breaking"], "8", "login" => "user5"),
-          issue("all the labels", %w[enhancement bug breaking], "9", "login" => "user9")
+          issue("no labels", [], "", "5", "login" => "user1"),
+          issue("enhancement", ["enhancement"], "", "6", "login" => "user2"),
+          issue("bug", ["bug"], "", "7", "login" => "user1"),
+          issue("breaking", ["breaking"], "", "8", "login" => "user5"),
+          issue("all the labels", %w[enhancement bug breaking], "", "9", "login" => "user9")
         ]
       end
 
       let(:pull_requests) do
         [
-          pr("no labels", [], "10", "login" => "user1"),
-          pr("enhancement", ["enhancement"], "11", "login" => "user5"),
-          pr("bug", ["bug"], "12", "login" => "user5"),
-          pr("breaking", ["breaking"], "13", "login" => "user5"),
-          pr("all the labels", %w[enhancement bug breaking], "14", "login" => "user5")
+          pr("no labels", [], "", "10", "login" => "user1"),
+          pr("enhancement", ["enhancement"], "", "11", "login" => "user5"),
+          pr("bug", ["bug"], "", "12", "login" => "user5"),
+          pr("breaking", ["breaking"], "", "13", "login" => "user5"),
+          pr("all the labels", %w[enhancement bug breaking], "", "14", "login" => "user5")
         ]
       end
 
@@ -103,6 +104,77 @@ module GitHubChangelogGenerator
         expect(subject.create_entry_for_tag(pull_requests, issues, "1.0.1", "1.0.1", Time.new(2017, 12, 4), "1.0.0")).to eq(changelog)
       end
     end
+
+    describe "#create_entry_for_tag_with_body" do
+      let(:options) do
+        Parser.default_options.merge(
+          user: "owner",
+          project: "repo",
+          bug_labels: ["bug"],
+          enhancement_labels: ["enhancement"],
+          breaking_labels: ["breaking"],
+          issue_line_with_body: true
+        )
+      end
+
+      let(:issues_with_body) do
+        [
+          issue("no labels", [], "Issue body description", "5", "login" => "user1"),
+          issue("enhancement", ["enhancement"], "Issue body description", "6", "login" => "user2"),
+          issue("bug", ["bug"], "Issue body description", "7", "login" => "user1"),
+          issue("breaking", ["breaking"], "Issue body description very long: Lorem ipsum dolor sit amet, consectetuer adipiscing elit. Aenean commodo ligula eget dolor. Aenean massa. Cum sociis natoque penatibus et magnis dis parturient montes, nascetur ridiculus mus. Donec quam felis, ultricies nec, pellentesque eu, pretium quis, sem. Nulla consequat massa quis enim. Donec pede justo, fringilla vel, aliquet nec, vulputate eget, arcu. In enim justo, rhoncus ut, imperdiet a, venenatis vitae, justo. Nullam dictum felis eu pede mollis pretium. Integer tincidunt. Cras dapibus. Vivamus elementum semper nisi. Aenean vulputate eleifend tellus. Aenean leo ligula, porttitor eu, consequat vitae, eleifend ac, enim.", "8", "login" => "user5"),
+          issue("all the labels", %w[enhancement bug breaking], "Issue body description. \nThis part should not appear.", "9", "login" => "user9")
+        ]
+      end
+
+      let(:pull_requests_with_body) do
+        [
+          pr("no labels", [], "PR body description", "10", "login" => "user1"),
+          pr("enhancement", ["enhancement"], "PR body description", "11", "login" => "user5"),
+          pr("bug", ["bug"], "PR body description", "12", "login" => "user5"),
+          pr("breaking", ["breaking"], "PR body description very long: Lorem ipsum dolor sit amet, consectetuer adipiscing elit. Aenean commodo ligula eget dolor. Aenean massa. Cum sociis natoque penatibus et magnis dis parturient montes, nascetur ridiculus mus. Donec quam felis, ultricies nec, pellentesque eu, pretium quis, sem. Nulla consequat massa quis enim. Donec pede justo, fringilla vel, aliquet nec, vulputate eget, arcu. In enim justo, rhoncus ut, imperdiet a, venenatis vitae, justo. Nullam dictum felis eu pede mollis pretium. Integer tincidunt. Cras dapibus. Vivamus elementum semper nisi. Aenean vulputate eleifend tellus. Aenean leo ligula, porttitor eu, consequat vitae, eleifend ac, enim.", "13", "login" => "user5"),
+          pr("all the labels", %w[enhancement bug breaking], "PR body description. \nThis part should not appear", "14", "login" => "user5")
+        ]
+      end
+
+      subject { described_class.new(options) }
+      it "generates issues and pull requests with body" do
+        changelog = <<-CHANGELOG.gsub(/^ {8}/, "")
+        ## [1.0.1](https://github.com/owner/repo/tree/1.0.1) (2017-12-04)
+
+        [Full Changelog](https://github.com/owner/repo/compare/1.0.0...1.0.1)
+
+        **Breaking changes:**
+
+        - **issue breaking [\\#8](https://github.com/owner/repo/issue/8)**   \nIssue body description very long: Lorem ipsum dolor sit amet, consectetuer adipiscing elit. Aenean commodo ligula eget dolor. Aenean massa. Cum sociis natoque penatibus et magnis dis parturient montes, nascetur ridiculus mus. Donec quam felis, ultricies nec, pellentesque eu, pretium quis, sem. Nulla consequat massa quis enim. Donec pede justo, fringilla vel, aliquet nec, vulputate eget, arcu. In enim justo, rhoncus ut, imperdiet a, venenatis vitae, justo. Nullam dictum felis eu pede mollis pretium. Integer tincidunt. Cras dapibus. Vivamus elementum semper nisi. Aenean vulputate eleifend tellus. Aenean leo ligula, porttitor eu, consequat vitae, eleifend ac, enim.
+        - **pr breaking [\\#13](https://github.com/owner/repo/pull/13) ([user5](https://github.com/user5))**   \nPR body description very long: Lorem ipsum dolor sit amet, consectetuer adipiscing elit. Aenean commodo ligula eget dolor. Aenean massa. Cum sociis natoque penatibus et magnis dis parturient montes, nascetur ridiculus mus. Donec quam felis, ultricies nec, pellentesque eu, pretium quis, sem. Nulla consequat massa quis enim. Donec pede justo, fringilla vel, aliquet nec, vulputate eget, arcu. In enim justo, rhoncus ut, imperdiet a, venenatis vitae, justo. Nullam dictum felis eu pede mollis pretium. Integer tincidunt. Cras dapibus. Vivamus elementum semper nisi. Aenean vulputate eleifend tellus. Aenean leo ligula, porttitor eu, consequat vitae, eleifend ac, enim.
+
+        **Implemented enhancements:**
+
+        - **issue enhancement [\\#6](https://github.com/owner/repo/issue/6)**   \nIssue body description
+        - **issue all the labels [\\#9](https://github.com/owner/repo/issue/9)**   \nIssue body description.
+        - **pr enhancement [\\#11](https://github.com/owner/repo/pull/11) ([user5](https://github.com/user5))**   \nPR body description
+        - **pr all the labels [\\#14](https://github.com/owner/repo/pull/14) ([user5](https://github.com/user5))**   \nPR body description.
+
+        **Fixed bugs:**
+
+        - **issue bug [\\#7](https://github.com/owner/repo/issue/7)**   \nIssue body description
+        - **pr bug [\\#12](https://github.com/owner/repo/pull/12) ([user5](https://github.com/user5))**   \nPR body description
+
+        **Closed issues:**
+
+        - **issue no labels [\\#5](https://github.com/owner/repo/issue/5)**   \nIssue body description
+
+        **Merged pull requests:**
+
+        - **pr no labels [\\#10](https://github.com/owner/repo/pull/10) ([user1](https://github.com/user1))**   \nPR body description
+
+        CHANGELOG
+
+        expect(subject.create_entry_for_tag(pull_requests_with_body, issues_with_body, "1.0.1", "1.0.1", Time.new(2017, 12, 4), "1.0.0")).to eq(changelog)
+      end
+    end
+
     describe "#parse_sections" do
       before do
         subject { described_class.new }
@@ -359,4 +431,3 @@ module GitHubChangelogGenerator
     end
   end
 end
-# rubocop:enable Metrics/ModuleLength

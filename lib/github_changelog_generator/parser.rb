@@ -218,6 +218,7 @@ module GitHubChangelogGenerator
         configure_sections: {},
         add_sections: {},
         issue_line_labels: [],
+        issue_line_with_body: false,
         max_issues: nil,
         simple_list: false,
         ssl_ca_file: nil,
